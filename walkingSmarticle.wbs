@@ -2,9 +2,13 @@ Sub Main()
 dim cc as integer
 	dim L as double
 	dim LW as double
+	dim T as double
+	dim GR as double
+
+	gr=60
 	const W_SMART=.053 'width of center link in CM
 	for cc = 1 to 1
-		LW = 1.1
+		LW = .9259
 		'WM.RunScript "D:\wkMdl_scripts\sg32.wbs"
 		'freq,numbodies,lparts (-1 = max_grains)
 		'freq		=6%
@@ -12,7 +16,7 @@ dim cc as integer
 		
 		
 		
-		temp=CrawlingSim(W_SMART,LW,.021,.0032)
+		temp=CrawlingSim(W_SMART,LW,.021,.0032,gr)
 		Sleep 10000
 		WM.ActiveDocument.Close
 	next 
@@ -20,9 +24,10 @@ End Sub
 
 REM Function CrawlingSim(freq as Integer, bodies as Integer, lp as boolean)]
 'W_SMART is spine width, LW is aspect ratio,THICK1 is center link thickness, THICK2 is outer link thickness
-Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 as double)
+Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 as double,GR as double)
 'to get lparts (.*'semicolon')
 'RME\1
+	const TT=1.7
 		dim L_SMART as double
 		L_SMART = LW*W_SMART
 		
@@ -32,7 +37,7 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 	W_UBOTT=W_SMART
 	dim W_BARB	as double
 	W_BARB	= THICK2				' barb width in cm
-	const circle_mass = 1
+
 	
 	dim H_BARB as double
 	H_BARB= L_SMART				' barb length in cm
@@ -41,26 +46,30 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 	
 	dim lparts as boolean 
 	lparts = false
+	const MOTOR_TYPE				= "rotation"		
 	const SPRING_K				= .5		'spring k val
 	const SPRING_B				= 0		'damping value
 	const M_BARB				= .5
 
 	REM const H_UBOTT	 			= 
-	const M_CENTER				= .5		' UBott mass
-	const M_OUTER				= .5
+	const M_CENTER				= 0.026		' UBott mass
+	const M_OUTER				= 0.0035
+	const circle_mass 			= 0.0001
+	const springsq_mass			= 0.0001
+		
 	Dim rndForce(1) as WMConstraint	   'random initial force
-	const springsq_mass		=1
+
 	
 	'Key consts for sim
 	const dens					= 25		' density of metal in particles
 	const SHOW_DETAILS          = false  	' show springs, dampers, strings
 	const SHOW_METERS         	= TRUE 	' show input and output meters
-	const FRAMES 				= 600
+	const FRAMES 				= 1200
 	
 	const SPF					= .05		'seconds per frame
 	'UBott consts 	
 
-	const FRICTION				= .3						'default was .3 for both static&kinetic
+	const FRICTION				= .37						'default was .3 for both static&kinetic
 	const ELAST					= 0
 	'barb consts
 
@@ -73,11 +82,11 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 	'wall and arena size consts
 
 	
-	const W_GROUND				= 12					
+	const W_GROUND				= 3					
 	const THICK_ARENA 				= 4
 	const M_WALL				= 1					' mass of wall
 	const GRAVITY				= 9.81
-	const circles 			= true
+	const circles 				= false
 
 
 	dim RunNumber as INTEGER
@@ -144,8 +153,10 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 	Doc.Gravity = "linear"
     Doc.LinearGravityConst=GRAVITY
 	Doc.WarnInconsistent 	= false
-	WinSize 498*Screen.TwipsPerPixelX, 148*Screen.TwipsPerPixelY   
-	
+	REM WinSize 498*Screen.TwipsPerPixelX, 148*Screen.TwipsPerPixelY   
+	WinSize 1000*Screen.TwipsPerPixelX, 300*Screen.TwipsPerPixelY   
+	dim Meter1 as WMOutput
+	dim Meter2 as WMOutput
 	'===== rwall stagger consts
 	Dim timestepMove(FRAMES) as Double
 	dim VConstMoveFrames as Integer
@@ -153,7 +164,19 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 	dim stepD as integer
 	'gosub make_frame_array
 '=======================Create Arena Walls and Grabbers=====================
-	gosub CreateWallsAndGrabbers
+	set BWall			= doc.newbody("rectangle")
+	BWall.name 			= "Bottom Wall"
+	BWall.px.value		= 0
+	BWall.py.value		= 0
+	BWall.height.value	= .1
+	BWall.width.value	= W_GROUND
+	BWall.kineticfriction.value		= FRICTION
+	BWall.StaticFriction.value		= FRICTION
+	BWall.elasticity.value			= ELAST
+	
+	Set bWallpt			= doc.newpoint("anchor")
+	Set bWallpt.body	= BWall
+
 '=======================Create Bodies =====================	
 	For j = 1 to 1
 		Randomize
@@ -168,12 +191,12 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 
 		Set LMotor(j) 				= Doc.NewConstraint("motor")
 		
-		if not lparts then
+
 			Set RBarb(j) 				= Doc.NewBody("rectangle") ';'
 			Set RSpringSq(j)			= Doc.NewBody("square") ';'
 			Set RSpring(j)				= Doc.NewConstraint("rspring") ';'
 			Set RMotor(j)				= Doc.NewConstraint("motor") ';'
-		end if
+
 		
 		if circles then
 			Set LBarbCircle(j)			= Doc.NewBody("Circle")
@@ -195,10 +218,10 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 		Doc.selectall false
 	
 		'make right side stuff not collide
-		if not lparts then
+	
 			Doc.select RBarb(j), true ';'
 			Doc.select RSpringSq(j), true ';'
-		end if
+
 		Doc.select Ubott(j), true
 		Doc.Collide false
 		Doc.selectall false
@@ -226,23 +249,25 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 		UBott(j).kineticfriction.value	= FRICTION
 		UBott(j).elasticity.value		= ELAST
 		'right barb
-		if not lparts then
-			RBarb(j).Height.Value 			= B_LEN'H_BARB   ';'
-			RBarb(j).Width.Value 			= W_BARB ';'
-			RBarb(j).name 					= "RBarb("+LTrim$(str$(j))+")" ';'
-			RBarb(j).mass.value				= M_BARB ';'
-			RBarb(j).staticfriction.value	= FRICTION ';'
-			RBarb(j).kineticfriction.value	= FRICTION ';'
-			RBarb(j).elasticity.value		= ELAST ';'
-		end if
+
+		RBarb(j).Height.Value 			= B_LEN'H_BARB   ';'
+		RBarb(j).Width.Value 			= W_BARB ';'
+		RBarb(j).name 					= "RBarb("+LTrim$(str$(j))+")" ';'
+		RBarb(j).mass.value				= M_BARB ';'
+		RBarb(j).staticfriction.value	= FRICTION ';'
+		RBarb(j).kineticfriction.value	= FRICTION ';'
+		RBarb(j).elasticity.value		= ELAST ';'
+		
+		
+		
 		'========Connect circles to barbs====================
 		if circles then
 			gosub ConnectLRBarbCircles
 		end if		
 		
-		if not lparts then
+
 			RBarb(j).Pr.value		= rot ';'
-		end if
+
 		UBott(j).Pr.value		= rot
 		LBarb(j).Pr.value		= rot
 '=========Spring Square creation===================
@@ -256,7 +281,7 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 		LSpringSq(j).elasticity.value		= ELAST
 		
 		'RSpringSq
-		if not lparts then
+
 			RSpringSq(j).height.value 			= W_BARB ';'
 			RSpringSq(j).name		  			= "RSpringSq("+LTrim$(str$(j))+")" ';'
 			RSpringSq(j).Pr.value				= rot ';'
@@ -264,7 +289,6 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 			RSpringSq(j).staticfriction.value	= FRICTION ';'
 			RSpringSq(j).kineticfriction.value	= FRICTION ';'
 			RSpringSq(j).elasticity.value		= ELAST ';'
-		end if
 
 '========Create Circles on end of staple barbs=======
 		if circles then
@@ -293,20 +317,19 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 		LSpring(j).show					= SHOW_DETAILS
 		'L motors
 		LMotor(j).name 					= "LMotor("+LTrim$(str$(j))+")"
-		LMotor(j).Motortype				="velocity"
+		LMotor(j).Motortype				=MOTOR_TYPE
 		LMotor(j).show					= SHOW_DETAILS
 		
 		'RSpring
-		if not lparts then
+
 			RSpring(j).name					="RSpring("+LTrim$(str$(j))+")" ';'
 			RSpring(j).k.value				= SPRING_K	 'SPRING K ';'
 			RSpring(j).DamperK.value		= SPRING_B	 'SPRING K ';'
 			RSpring(j).show					= SHOW_DETAILS ';'
 			'R motors
 			RMotor(j).name 					= "RMotor("+LTrim$(str$(j))+")" ';'
-			RMotor(j).Motortype				="velocity" ';'
+			RMotor(j).Motortype				=	MOTOR_TYPE
 			RMotor(j).show					= SHOW_DETAILS ';'
-		end if
 
 '=========Set attachments of springs and motors=========
 		'LSPRINGS AND LMOTORS
@@ -326,7 +349,7 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 		
 		
 		'RSPRINGS AND R MOTORS
-		if not lparts then
+
 			Set RSpring(j).point(1).body	= RBarb(j) ';'
 			Set RSpring(j).point(2).body	= RSpringSq(j) ';'
 					
@@ -342,32 +365,100 @@ Function CrawlingSim(W_SMART as double, LW as double, THICK1 as double, THICK2 a
 			RMotor(j).Point(2).px.value		= -(W_Barb-W_UBOTT)/2 ';'
 			RMotor(j).Point(2).py.value		= 0 ';'
 			RSpring(j).rotation.value		= RSpring(j).currentrotation ';'
-		end if
 		LSpring(j).rotation.value		= LSpring(j).currentrotation
 		 
 '========give motors and initial random force==========
 		'give barb motors force formula
-		if MOTORS_ON then
-			if not lparts then
-				RMotor(j).Field.Formula = "cos(t*8+pi)*100" ';'
-			end if
-			LMotor(j).Field.Formula = "-cos(t*8+pi)*100"
-		else
-			if not lparts then
-				RMotor(j).Field.Formula = "0" ';'
-			end if
-			LMotor(j).Field.Formula = "0"
-		end if
-				
-		set rndForce(j) 				= Doc.newConstraint("Force")
-		set rndForce(j).Point(1).body 	= UBott(j)
+		dim cc as integer
+		const NT = 11
+		dim an(NT) as double
+		dim bn(NT) as double
+		dim args(NT) as double
+
+		an(1)=-.698
+		an(2)=0
+		an(3)=-.077
+		an(4)=0
+		an(5)=-.028
+		an(6)=0
+		an(7)=-.014
+		an(8)=0
+		an(9)=-.009
+		an(10)=0
+		an(11)=-.006
 		
-		rndForce(j).point(1).px.value 	= 0
-		rndForce(j).point(1).py.value 	= 0
-		rndForce(j).AlwaysActive		= True
+		bn(1)=.689
+		bn(2)=0
+		bn(3)=-.076
+		bn(4)=0
+		bn(5)=.028
+		bn(6)=0
+		bn(7)=-.014
+		bn(8)=0
+		bn(9)=.009
+		bn(10)=0
+		bn(11)=-.006
+		
+		args(1)=3.7
+		args(2)=0
+		args(3)=11
+		args(4)=0
+		args(5)=18.5
+		args(6)=0
+		args(7)=25.9
+		args(8)=0
+		args(9)=33.26
+		args(10)=0
+		args(11)=40.66
+		
+		dim arg as double
+		dim arg2 as double
+		Dim nums(5) as Integer
+		nums(0)=1
+		nums(1)=3
+		nums(2)=5
+		nums(3)=7
+		nums(4)=9
+		nums(5)=11
+		dim p as String
+		dim p2 as String
+		
+		p="2*" & GR & "/" & TT &"*(0"
+		p2="2*" & GR & "/" & TT &"*(0"
+		REM p="2*45/" & TT & "(0"
+		REM p=p & an(1) & "*cos(2*Pi*" & nums(1) & "*t/"
+		REM p=p & TT & ")"
+		REM RMotor(j).Field.Formula = "an(1)*cos(2*Pi*1*t/T)+bn(1)*sin(2*pi*1*t./T)+an(3)*cos(2*Pi*3*t/T)+bn(3)*sin(2*pi*3*t./T)+an(5)*cos(2*Pi*5*t/T)+bn(5)*sin(2*pi*5*t./T)+_
+		for Each n in nums
+		arg = CInt(2*Pi*n/TT*10)
+		arg = arg/10
+		
+		arg2 = CInt(2*Pi*n/TT*10*7*pi/4)
+		arg2 = arg2/10
+		
+		REM p=p & "+" & an(n) & "*cos(" & args(n) & "*t)+" & bn(n) & "*sin(" & args(n) & "*t)"
+		p=p & "+" & an(n) & "*cos(" & arg & "*t)+" & bn(n) & "*sin(" & arg & "*t)"
+		p2=p2 & "+" & an(n) & "*cos(" & arg & "*t+" & arg2 &")+" & bn(n) & "*sin(" & arg & "*t+"& arg2 & ")"
+		next
+		p=p & ")+90"
+		p2=p2 & ")-90"
+		RMotor(j).Field.Formula = p
+		LMotor(j).Field.Formula = p2
+
+		REM RMotor(j).Field.Formula = "60*sin(1.7*t)+90"
+		REM LMotor(j).Field.Formula = "60*cos(1.7*t)-90"
 	
-		rndForce(j).fx.formula			= LTrim$(str$(Random(-5,5)))+"*(t<1)" 'gives initial random direction
-		rndForce(j).fy.formula			= LTrim$(str$(Random(-5,5)))+"*(t<1)"
+				
+		REM set rndForce(j) 				= Doc.newConstraint("Force")
+		REM set rndForce(j).Point(1).body 	= UBott(j)
+		
+		REM rndForce(j).point(1).px.value 	= 0
+		REM rndForce(j).point(1).py.value 	= 0
+		REM rndForce(j).AlwaysActive		= True
+	
+		REM rndForce(j).fx.formula			= LTrim$(str$(Random(-5,5)))+"*(t<1)" 'gives initial random direction
+		REM rndForce(j).fy.formula			= LTrim$(str$(Random(-5,5)))+"*(t<1)"
+		
 		'rndForce(j).fx.formula			= "-9.8" 'gives initial random direction
 	
 
@@ -398,20 +489,42 @@ REM 'where simulation values are tracked
 	REM loscid = WallOscillator.id
 	REM rid = RWall.id
 	REM lid = LWall.id
-	REM Set Meter1=Doc.NewOutput()
-    REM Meter1.Format="Graph"
-    REM Meter1.x=700
-    REM Meter1.Y=10
+	Set Meter1=Doc.NewOutput()
+    Meter1.Format="Graph"
+	
+	dim lmotorid as integer
+	dim rmotorid as integer
+	dim bodyid as integer
+	lmotorid = LMotor(1).id
+	rmotorid = RMotor(1).id
+	bodyid = UBott(1).id
+    Meter1.x=700
+    Meter1.Y=10
     REM Meter1.width=300
 	REM Meter1.Column(1).label="Tension |F.x|"
 	REM meter1.column(2).label="Rwall x position"
 	REM meter1.column(3).label="Lwall y position"
     REM Meter1.Column(1).Cell.Formula="-constraintforce("+LTrim$(str$(oscid))+").x"
-	REM meter1.column(2).cell.formula = "(Body["+str$(rid)+"].p.x - Body["+str$(lid)+"].p.x)" 'rwall position
-	REM meter1.column(3).cell.formula = "(Constraint["+str$(loscid)+"].dp.x)-"+str$(walloscLen)
-	REM Meter1.column(1).autoscale = false
-	REM meter1.column(1).max = 40
-	REM meter1.column(1).min = -40
+	meter1.column(0).cell.formula = "Constraint[11].dp.r"
+	meter1.column(1).cell.formula = "Constraint[19].dp.r"
+	meter1.column(0).label = "A1"
+	meter1.column(1).label = "A2"
+
+	REM Meter1.column(1).autoscale = true
+	
+	
+	Set Meter2=Doc.NewOutput()
+    Meter2.Format="Graph"
+	Meter2.x=700
+    Meter2.Y=525
+	meter2.column(0).cell.formula = "time"
+	meter2.column(0).label = "time"
+	meter2.column(1).cell.formula = "Body[4].p.x"
+	meter2.column(1).label = "x"
+	Meter2.column(1).autoscale = true
+	Meter2.column(1).autoscale = true
+		meter2.column(1).min = -0.3
+	meter2.column(1).max = 0.3
 
 
     REM 'set meter1.show = SHOW_METERS
@@ -458,21 +571,9 @@ Exit function
 
 '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%SUBS%%%%%%%%%%%%%%%%%%%%%%%%%%%
 '#############################################
-CreateWallsAndGrabbers:
 
-	set BWall			= doc.newbody("rectangle")
-	BWall.name 			= "Bottom Wall"
-	BWall.px.value		= 0
-	BWall.py.value		= 0
-	BWall.height.value	= .1
-	BWall.width.value	= .6
-	BWall.kineticfriction.value		= FRICTION
-	BWall.StaticFriction.value		= FRICTION
-	BWall.elasticity.value			= ELAST
+
 	
-	Set bWallpt			= doc.newpoint("anchor")
-	Set bWallpt.body	= BWall
-	return
 
 listFiles:
 	'filenames = My.Computer.FileSystem.GetFiles("D:\wkMdl_scripts\Output\", FileIO.SearchOption.SearchTopLevelOnly, "*.txt")
@@ -482,9 +583,9 @@ listFiles:
 	
 	'GET FILE NUMBERS IN DIRECTORY!
 	Dim fl()
-	FileList fl,"D:\wkMdl_scripts\Output\data*.txt"
+	FileList fl,"A:\CrawlingSmarticleOut\data\data*.txt"
 	ArraySort fl
-	maxnum =ubound(fl)+1
+	maxnum =1
 	
 return		
 ExportMedia:
@@ -492,46 +593,37 @@ ExportMedia:
 		doc.run FRAMES
 		if EXPORT = 1 then
 			doc.reset
-			doc.SelectAll False
-			Doc.Select Meter1
+			doc.SelectAll True
+			REM Doc.Select Meter1
 			Doc.ExportStartFrame = 0
 			Doc.ExportStopFrame = FRAMES
 			gosub listFiles
-			outputFile = LTrim$("A:\CrawlingSmarticleOut\data" &str$(maxnum) &".txt")
-			wmFile = LTrim$("A:\CrawlingSmarticleOut\wm"& str$(maxnum) &".wm")
-			Doc.ExportMeterData outputFile
-			Doc.SaveAs wmFile, True
+			Open wmFile For Append Access Write As #1
+			outputFile = LTrim$("A:\CrawlingSmarticleOut\data" & str$(maxnum) &".txt")
+			wmFile = LTrim$("A:\CrawlingSmarticleOut\data"& str$(maxnum) &"DAT.txt")
+			Doc.ExportMeterData wmFile
+			REM Doc.SaveAs wmFile, True
 
-			if Motors_on then
-				mout = 1
-			else
-				mout = 0
-			end if
+			mout=1
+			lout = 0
 			
-			if lparts then
-				lout = 1
-			else
-				lout = 0
-			end if
-			Open outputFile For Append Access Write As #1
-			writeString = "mass" & Chr(9) &str$(lwallmass) &_
-			Chr(9)& "waittime" & Chr(9)&str$(waittime/spf)&_
-			Chr(9)& "woarena"& Chr(9) &str$(W_OARENA) & Chr(9)& "h_oarena"& Chr(9) &str$(h_oarena) &_
-			chr(9)& "wall_percent" & Chr(9) & str$(wallpercent) &_
-			chr(9)& "wallfreq" & Chr(9) & str$(wall_freq) &_
-			chr(9)& "1" & Chr(9) &str$(1) &_
-			chr(9)& "amp_max" & Chr(9) &str$(amp_max) &_
-			chr(9)& "spring_b" & Chr(9) &str$(spring_b)&_
-			chr(9)& "spring_k" & Chr(9) &str$(spring_k)&_
-			chr(9)& "MOTORS_ON" & Chr(9) &str$(mout)&_
-			chr(9)& "lparts" & Chr(9) &str$(lout)
-			write #1, writestring
+			REM Open outputFile For Append Access Write As #1
+			REM writeString = "mass" & Chr(9) & M_CENTER+2*M_OUTER &_
+			REM Chr(9)& "LW" & Chr(9)& LW &_
+			REM chr(9)& "L" & Chr(9) & L_SMART &_
+			REM chr(9)& "W" & Chr(9) & W_SMART &_
+			REM chr(9)& "T1" & Chr(9) & THICK1 &_
+			REM chr(9)& "T2" & Chr(9) & THICK2 &_
+			REM chr(9)& "GAITR" & Chr(9) & GR
+			REM write #1, writestring
 			
-			close
+			REM close
 			doc.reset	
+			Doc.SaveAs wmFile, True
+			
 		end if
 		RunNumber = RunNumber+1
-		
+		Doc.Close
 	wend
 	return
 
@@ -550,81 +642,57 @@ ConnectLRBarbCircles:
 	
 	'rbarb circle
 	'========always sets these parameters 
-	if lparts then 
-		Set RBarbCircleJt(j).point(1).body			= RBarbCircle(j)
-		Set	RBarbCircleJt(j).point(2).body			= UBott(j)
-		Set	RBarbCircleJt(j).point(2).px.value		= W_UBOTT/2
-		Set	RBarbCircleJt(j).point(2).py.value		= 0
-		Set	RBarbCircleJt(j).show					= SHOW_DETAILS 
-		RBarbCircleJt(j).name						= "RBarbCircleJt("+LTrim$(str$(j))+")"
-	else
+
 		Set RBarbCircleJt(j).point(1).body			= RBarbCircle(j)
 		Set	RBarbCircleJt(j).point(2).body			= RBarb(j)
 		Set	RBarbCircleJt(j).point(2).px.value		= 0
 		Set	RBarbCircleJt(j).point(2).py.value		= RBarb(j).height.value/2
 		Set	RBarbCircleJt(j).show					= SHOW_DETAILS
 		RBarbCircleJt(j).name						= "RBarbCircleJt("+LTrim$(str$(j))+")"
-	end if
+
 
 
 
 	return
 
 
-Make_frame_array:
-	'stepspd = .5
-	'stepAMT=4
-	'waitframes = 50
-	VConstMoveFrames = fix(WALL_MOVE_DISTANCE*W_OARENA*(1/SPF)/RWall_spd)
-	StepStart = fix(.7*VConstMoveFrames) 'percent of distance to go fullspeed for
+REM Make_frame_array:
+	REM 'stepspd = .5
+	REM 'stepAMT=4
+	REM 'waitframes = 50
+	REM VConstMoveFrames = fix(WALL_MOVE_DISTANCE*W_OARENA*(1/SPF)/RWall_spd)
+	REM StepStart = fix(.7*VConstMoveFrames) 'percent of distance to go fullspeed for
 	
-	stepD = fix((VConstMoveFrames-StepStart)*(RWall_Spd/stepSpd)/(stepAmt)) 'gives me frame amount for steps (x2 since half are steps half 0)
-	stepCount = 0
-	waitCount = 0
-	totalSteps = 0
-	for i = 1 to frames
-		if i < StepStart then
-			timestepMove(i) = RWall_spd
-			totalSteps = totalSteps+1
-		else
-			'msgbox(totalSteps)
-			if totalSteps = VConstMoveFrames then
-				timestepMove(i) = 0
-			else
-				if StepCount < stepD then
-					timestepMove(i) = RWall_spd
-					stepCount = stepCount+1
-					totalSteps = totalSteps+1
-				elseif stepCount = stepD then
-					timestepMove(i) = 0
-					waitcount = waitCount+1
-					if waitcount = waitframes then
-						stepCount = 0
-						waitCount = 0
-					end if
-				end if
-			end if
-		end if		
-	next
-	'msgbox("totalSteps:"+str$(totalSteps)+"constwallmoveframeend:"+str$(VConstMoveFrames)+" StepStart:" + str$(StepStart)+" stepD:" + str$(stepD))
-	return
+	REM stepD = fix((VConstMoveFrames-StepStart)*(RWall_Spd/stepSpd)/(stepAmt)) 'gives me frame amount for steps (x2 since half are steps half 0)
+	REM stepCount = 0
+	REM waitCount = 0
+	REM totalSteps = 0
+	REM for i = 1 to frames
+		REM if i < StepStart then
+			REM timestepMove(i) = RWall_spd
+			REM totalSteps = totalSteps+1
+		REM else
+			REM 'msgbox(totalSteps)
+			REM if totalSteps = VConstMoveFrames then
+				REM timestepMove(i) = 0
+			REM else
+				REM if StepCount < stepD then
+					REM timestepMove(i) = RWall_spd
+					REM stepCount = stepCount+1
+					REM totalSteps = totalSteps+1
+				REM elseif stepCount = stepD then
+					REM timestepMove(i) = 0
+					REM waitcount = waitCount+1
+					REM if waitcount = waitframes then
+						REM stepCount = 0
+						REM waitCount = 0
+					REM end if
+				REM end if
+			REM end if
+		REM end if		
+	REM next
+	REM 'msgbox("totalSteps:"+str$(totalSteps)+"constwallmoveframeend:"+str$(VConstMoveFrames)+" StepStart:" + str$(StepStart)+" stepD:" + str$(stepD))
+	REM return
 
 
 End function
-
-'******************DEPRECATED CODE************************
-'=======old only motor and barb config no springs===========
-'		Set LMotor(j).Point(1).Body = LBarb(j)
-'		Set LMotor(j).Point(2).Body = UBott(j)
-'		Set RMotor(j).Point(1).Body = RBarb(j)
-'		Set RMotor(j).Point(2).Body = UBott(j)
-'		
-'		LMotor(j).Point(1).px.value=0
-'		LMotor(j).Point(1).py.value=-(H_BARB-H_UBOTT)/2
-'		LMotor(j).Point(2).px.value=(W_Barb-W_UBOTT)/2
-'		LMotor(j).Point(2).py.value=0
-'		
-'		RMotor(j).Point(1).px.value=0
-'		RMotor(j).Point(1).py.value=-(H_BARB-H_UBOTT)/2
-'		RMotor(j).Point(2).px.value=-(W_Barb-W_UBOTT)/2
-'		RMotor(j).Point(2).py.value=0
